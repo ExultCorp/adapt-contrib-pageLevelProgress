@@ -6,101 +6,93 @@
 
 define(function(require) {
 
-	var Adapt = require('coreJS/adapt');
-	var Backbone = require('backbone');
+    var Adapt = require('coreJS/adapt');
+    var Backbone = require('backbone');
 
-	var PageLevelProgressView = Backbone.View.extend({
+    var PageLevelProgressMenuView = require('extensions/adapt-contrib-pageLevelProgress/js/PageLevelProgressMenuView');
+    var PageLevelProgressNavigationView = require('extensions/adapt-contrib-pageLevelProgress/js/PageLevelProgressNavigationView');
 
-		className: "page-level-progress",
+    function setupPageLevelProgress(pageModel, enabledProgressComponents) {
 
-		initialize: function() {
-			this.listenTo(Adapt, 'remove', this.remove);
-			this.render();
-		},
+        var componentsCollection = new Backbone.Collection(enabledProgressComponents);
 
-		events: {
-			'click .page-level-progress-item a': 'scrollToPageElement'
-		},
+        new PageLevelProgressNavigationView({model: pageModel, collection: componentsCollection});
 
-		scrollToPageElement: function(event) {
-			event.preventDefault();
-			var currentComponentSelector = '.' + $(event.currentTarget).attr('data-page-level-progress-id');
-			var $currentComponent = $(currentComponentSelector);
-			$(window).scrollTo($currentComponent, {offset:{top:-$('.navigation').height()}});
-			Adapt.trigger('page:scrollTo', currentComponentSelector);
-			Adapt.trigger('drawer:closeDrawer');
-		},
+    }
 
-		render: function() {
-			var data = this.collection.toJSON();
-	        var template = Handlebars.templates["pageLevelProgress"];
-	        this.$el.html(template({components:data}));
-	        return this;
-		}
+    // To get only those models who were enabled for pageLevelProgress
+    function getPageLevelProgressEnabledModels(models) {
+        return _.filter(models, function(model) {
+            if (model.get('_pageLevelProgress')) {
+                return model.get('_pageLevelProgress')._isEnabled;
+            }
+        });
+    }
 
-	});
+    // This should add/update progress on menuView
+    Adapt.on('menuView:postRender', function(view) {
 
-	var PageLevelProgressNavigationView = Backbone.View.extend({
+        // do not proceed until pageLevelProgress enabled on course.json
+        if (!Adapt.course.get('_pageLevelProgress') || !Adapt.course.get('_pageLevelProgress')._isEnabled) {
+            return;
+        }
 
-		tagName: 'a',
+        var pageLevelProgress = view.model.get('_pageLevelProgress');
+        var viewType = view.model.get('_type');
 
-		className: 'page-level-progress-navigation',
+        // Progress bar should not render for course viewType
+        if (viewType == 'course') return;
 
-		initialize: function() {
-			this.listenTo(Adapt, 'remove', this.remove);
-			this.listenTo(this.collection, 'change:_isComplete', this.updateProgressBar);
-			this.$el.attr('href', '#');
-			this.render();
-			this.updateProgressBar();
-		},
+        if (pageLevelProgress && pageLevelProgress._isEnabled) {
 
-		events: {
-			'click': 'onProgressClicked'
-		},
+            // This should manage progress of those menuItem which have article as their children.
+            if (viewType == 'page') {
 
-		render: function() {
-			var data = this.collection.toJSON();
-	        var template = Handlebars.templates["pageLevelProgressNavigation"];
-	        $('.navigation-drawer-toggle-button').after(this.$el.html(template({components:data})));
-	        return this;
-		},
+                if (!view.model.get('completedChildrenAsPercentage')) {
+                    view.model.set('completedChildrenAsPercentage', 0);
+                }
 
-		updateProgressBar: function() {
-			var componentCompletionRatio = this.collection.where({_isComplete:true}).length / this.collection.length;
-			var percentageOfCompleteComponents = componentCompletionRatio*100;
+                view.$el.find('.menu-item-inner').append(new PageLevelProgressMenuView({model: view.model}).$el);
 
-			this.$('.page-level-progress-navigation-bar').css('width', percentageOfCompleteComponents+'%');
+            }
 
-		},
+            // This should manage progress of those menuItem which have sub-menu as their children.
+            else if (viewType == 'menu' && view.model.get('_id') != Adapt.location._currentId) {
 
-		onProgressClicked: function(event) {
-			event.preventDefault();
-			Adapt.drawer.triggerCustomView(new PageLevelProgressView({collection:this.collection}).$el, false);
-		}
+                var availableContentObjects = view.model.findDescendants('contentObjects').where({'_isAvailable': true});
+                var childrenWithProgressEnabled = getPageLevelProgressEnabledModels(availableContentObjects);
 
-	});
+                var totalCompletedChildrenAsPercentage = 0;
+                _.each(childrenWithProgressEnabled, function(contentObjects, index) {
+                    totalCompletedChildrenAsPercentage += contentObjects.get('completedChildrenAsPercentage') | 0;
+                });
 
-	function setupPageLevelProgress(enabledProgressComponents) {
+                var completedChildrenAsPercentage = (totalCompletedChildrenAsPercentage / childrenWithProgressEnabled.length) | 0;
+                view.model.set('completedChildrenAsPercentage', completedChildrenAsPercentage);
 
-		var componentsCollection = new Backbone.Collection(enabledProgressComponents);
+                view.$el.find('.menu-item-inner').append(new PageLevelProgressMenuView({model: view.model}).$el);
 
-		new PageLevelProgressNavigationView({collection:componentsCollection});
-	
-	}
+            }
 
-	Adapt.on('router:page', function(pageModel) {
-		var currentPageComponents = pageModel.findDescendants('components').where({'_isAvailable': true});
+        }
 
-		var enabledProgressComponents = _.filter(currentPageComponents, function(component) {
-			if (component.attributes._pageLevelProgress) {
-				return component.attributes._pageLevelProgress._isEnabled;
-			}
-		});
+    });
 
-		if (enabledProgressComponents.length > 0) {
-			setupPageLevelProgress(enabledProgressComponents);
-		}
+    // This should add/update progress on page navigation bar
+    Adapt.on('router:page', function(pageModel) {
 
-	});
+        // do not proceed until pageLevelProgress enabled on course.json
+        if (!Adapt.course.get('_pageLevelProgress') || !Adapt.course.get('_pageLevelProgress')._isEnabled) {
+            return;
+        }
 
-})
+        var currentPageComponents = pageModel.findDescendants('components').where({'_isAvailable': true});
+        var enabledProgressComponents = getPageLevelProgressEnabledModels(currentPageComponents);
+
+        if (enabledProgressComponents.length > 0) {
+            setupPageLevelProgress(pageModel, enabledProgressComponents);
+        }
+
+    });
+
+});

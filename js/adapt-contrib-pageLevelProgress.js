@@ -1,8 +1,8 @@
-/*
-* Page Level Progress
-* License - http://github.com/adaptlearning/adapt_framework/LICENSE
-* Maintainers - Daryl Hedley <darylhedley@hotmail.com>
-*/
+    /*
+    * Page Level Progress
+    * License - http://github.com/adaptlearning/adapt_framework/LICENSE
+    * Maintainers - Amruta Thakur <amruta.thakur@exultcorp.com>
+    */
 
 define(function(require) {
 

@@ -1,3 +1,8 @@
+/*
+ * Page Level Progress
+ * License - http://github.com/adaptlearning/adapt_framework/LICENSE
+ * Maintainers - Amruta Thakur <amruta.thakur@exultcorp.com>
+ */
 define(function(require) {
 
     var Adapt = require('coreJS/adapt');
